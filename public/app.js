@@ -81,7 +81,7 @@ function renderPlayers(room) {
     if (!player) {
       const empty = document.createElement('div');
       empty.className = 'player-info';
-      empty.textContent = 'Vacio';
+      empty.textContent = 'Vacío';
       seat.appendChild(empty);
       continue;
     }
@@ -110,8 +110,11 @@ function renderPlayers(room) {
 
 function renderHand() {
   ui.playerHand.innerHTML = '';
-  const selfPlayer = currentRoom.players.find((p) => p.id === currentPlayerId);
-  const isMyTurn = currentRoom.currentPlayer && currentRoom.currentPlayer.id === currentPlayerId;
+  const isMyTurn = currentRoom && currentRoom.currentPlayer && currentRoom.currentPlayer.id === currentPlayerId;
+
+  if (!currentRoom || !playerHand) {
+    return;
+  }
 
   playerHand.forEach((card) => {
     const cardEl = createCardElement(card, isMyTurn);
@@ -119,13 +122,25 @@ function renderHand() {
   });
 }
 
+function updatePlayerCount(room) {
+  const count = room.players.length;
+  const maxCount = room.maxPlayers;
+  let msg = `Sala: ${count}/${maxCount} jugadores`;
+  
+  if (!room.started) {
+    showMessage(msg, 'success');
+  }
+}
+
 function renderRoom(room) {
   currentRoom = room;
   ui.roomBadge.textContent = room.id;
   ui.roundLabel.textContent = `Ronda ${room.currentRound + 1} / 8`;
+  
   if (room.roundInfo) {
     ui.roundObjective.textContent = room.roundInfo.description;
   }
+  
   ui.tableMessage.textContent = room.tableMessage;
   ui.deckCount.textContent = room.deckCount;
   ui.discardCount.textContent = room.discard ? room.discard.length : 0;
@@ -152,7 +167,21 @@ function renderRoom(room) {
     ui.gamePanel.classList.add('hidden');
     ui.lobbyPanel.classList.remove('hidden');
     ui.startGameBtn.classList.remove('hidden');
+    updatePlayerCount(room);
   }
+}
+
+function joinRoomByCode() {
+  const roomId = ui.roomCode.value.trim().toUpperCase();
+  const name = ui.playerName.value.trim() || 'Jugador';
+
+  if (!roomId) {
+    showMessage('Ingresa un código de sala.', 'error');
+    return;
+  }
+
+  socket.emit('join-room', { roomId, name });
+  showMessage('Uniéndote a la sala...', 'success');
 }
 
 function bindEvents() {
@@ -163,18 +192,21 @@ function bindEvents() {
     showMessage('Creando sala...', 'success');
   });
 
+  ui.joinRoomBtn.addEventListener('click', () => {
+    joinRoomByCode();
+  });
+
   ui.joinDirectBtn.addEventListener('click', () => {
-    const roomId = ui.roomCode.value.trim().toUpperCase();
-    const name = ui.playerName.value.trim() || 'Jugador';
-    if (!roomId) {
-      showMessage('Ingresa un código de sala.', 'error');
-      return;
-    }
-    socket.emit('join-room', { roomId, name });
+    joinRoomByCode();
   });
 
   ui.startGameBtn.addEventListener('click', () => {
+    if (!currentRoom || currentRoom.players.length < 2) {
+      showMessage('Se necesitan al menos 2 jugadores para iniciar.', 'error');
+      return;
+    }
     socket.emit('start-game');
+    showMessage('Iniciando partida...', 'success');
   });
 
   ui.deckButton.addEventListener('click', () => {
@@ -198,6 +230,7 @@ socket.on('joined-room', ({ roomId, playerId }) => {
 });
 
 socket.on('room-state', (room) => {
+  console.log('room-state recibido:', room);
   renderRoom(room);
 });
 
@@ -208,6 +241,15 @@ socket.on('player-hand', ({ hand }) => {
 
 socket.on('error-message', (message) => {
   showMessage(message, 'error');
+});
+
+socket.on('connect', () => {
+  console.log('Conectado al servidor');
+});
+
+socket.on('disconnect', () => {
+  console.log('Desconectado del servidor');
+  showMessage('Conexión perdida', 'error');
 });
 
 bindEvents();
