@@ -19,6 +19,7 @@ const ui = {
   joinRoomBtn: document.getElementById('join-room-btn'),
   joinDirectBtn: document.getElementById('join-direct-btn'),
   startGameBtn: document.getElementById('start-game-btn'),
+  startGameSection: document.getElementById('start-game-section'),
   deckButton: document.getElementById('deck-button'),
   discardButton: document.getElementById('discard-button'),
   layDownBtn: document.getElementById('lay-down-btn')
@@ -122,25 +123,18 @@ function renderHand() {
   });
 }
 
-function updatePlayerCount(room) {
-  const count = room.players.length;
-  const maxCount = room.maxPlayers;
-  let msg = `Sala: ${count}/${maxCount} jugadores`;
-  
-  if (!room.started) {
-    showMessage(msg, 'success');
-  }
+function updateStartButton(room) {
+  const hasEnoughPlayers = room && room.players && room.players.length >= 2;
+  ui.startGameSection.classList.toggle('hidden', !hasEnoughPlayers || room.started);
 }
 
 function renderRoom(room) {
   currentRoom = room;
   ui.roomBadge.textContent = room.id;
   ui.roundLabel.textContent = `Ronda ${room.currentRound + 1} / 8`;
-  
   if (room.roundInfo) {
     ui.roundObjective.textContent = room.roundInfo.description;
   }
-  
   ui.tableMessage.textContent = room.tableMessage;
   ui.deckCount.textContent = room.deckCount;
   ui.discardCount.textContent = room.discard ? room.discard.length : 0;
@@ -156,6 +150,7 @@ function renderRoom(room) {
 
   renderPlayers(room);
   renderHand();
+  updateStartButton(room);
 
   if (room.started) {
     ui.lobbyPanel.classList.add('hidden');
@@ -166,8 +161,6 @@ function renderRoom(room) {
   } else {
     ui.gamePanel.classList.add('hidden');
     ui.lobbyPanel.classList.remove('hidden');
-    ui.startGameBtn.classList.remove('hidden');
-    updatePlayerCount(room);
   }
 }
 
