@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Carioca Online</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-icon">♠</div>
+          <div>
+            <p class="eyebrow">Juego de cartas</p>
+            <h1>Carioca Online</h1>
+          </div>
+        </div>
+        <div class="room-meta">
+          <span id="room-badge">Sin sala</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <!-- PANEL LOBBY -->
+        <section id="lobby-panel" class="panel lobby-panel">
+          <h2>Crear o unirse a una sala</h2>
+
+          <label>
+            Tu nombre
+            <input id="player-name" type="text" maxlength="18" value="Jugador" />
+          </label>
+
+          <label>
+            Cantidad de jugadores
+            <select id="player-count">
+              <option value="2">2 jugadores</option>
+              <option value="3">3 jugadores</option>
+              <option value="4" selected>4 jugadores</option>
+            </select>
+          </label>
+
+          <div class="button-row">
+            <button id="create-room-btn" class="primary">Crear sala</button>
+            <button id="join-room-btn" class="secondary">Unirme</button>
+          </div>
+
+          <div class="join-by-code">
+            <input id="room-code" type="text" maxlength="5" placeholder="Código de sala" />
+            <button id="join-direct-btn">Entrar</button>
+          </div>
+
+          <div id="message-box" class="message-box"></div>
+        </section>
+
+        <!-- PANEL JUEGO -->
+        <section id="game-panel" class="panel game-panel hidden">
+          <div class="table-topbar">
+            <div>
+              <p class="eyebrow">Ronda</p>
+              <h3 id="round-label">Ronda 1</h3>
+            </div>
+            <div class="status-box">
+              <span>Objetivo</span>
+              <strong id="round-objective">-</strong>
+            </div>
+          </div>
+
+          <div class="table-center">
+            <div class="players-grid">
+              <div id="player-0" class="seat seat-top"></div>
+              <div id="player-1" class="seat seat-left"></div>
+              <div id="player-2" class="seat seat-right"></div>
+              <div id="player-3" class="seat seat-bottom"></div>
+            </div>
+
+            <div class="center-zone">
+              <div class="deck-area">
+                <button id="deck-button" class="deck-stack">
+                  <div class="card-back">🎰</div>
+                  <span id="deck-count" class="card-count">0</span>
+                </button>
+                <button id="discard-button" class="discard-pile">
+                  <div id="discard-preview" class="discard-card"></div>
+                  <span id="discard-count" class="card-count">0</span>
+                </button>
+              </div>
+
+              <div class="table-status">
+                <span id="table-message">Esperando jugadores...</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="player-hand-wrap">
+            <div class="hand-header">
+              <h4>Tu mano</h4>
+              <div class="hand-actions">
+                <button id="lay-down-btn" class="secondary">Bajarme</button>
+                <button id="start-game-btn" class="primary">Iniciar partida</button>
+              </div>
+            </div>
+            <div id="player-hand" class="player-hand"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
