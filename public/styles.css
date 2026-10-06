@@ -235,6 +235,8 @@ button:disabled {
   border-radius: 14px;
   padding: 10px;
   font-size: 0.9rem;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .seat-top {
@@ -311,18 +313,38 @@ button:disabled {
 
 .laid-group {
   font-size: 0.75rem;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 6px;
   background: rgba(123, 211, 139, 0.15);
-  border: 1px solid rgba(123, 211, 139, 0.3);
+  border: 2px solid rgba(123, 211, 139, 0.3);
   color: #b4f2c5;
   word-break: break-word;
+  cursor: grab;
+  transition: all 0.2s;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.laid-group:active {
+  cursor: grabbing;
+}
+
+.laid-group.drag-over-group {
+  background: rgba(123, 211, 139, 0.4);
+  border-color: var(--primary-strong);
+  box-shadow: 0 0 12px rgba(212, 168, 68, 0.6);
+  transform: scale(1.02);
 }
 
 .laid-group.scale {
   background: rgba(212, 168, 68, 0.15);
-  border: 1px solid rgba(212, 168, 68, 0.3);
+  border-color: rgba(212, 168, 68, 0.3);
   color: #f0c85b;
+}
+
+.laid-group.scale.drag-over-group {
+  background: rgba(212, 168, 68, 0.4);
 }
 
 .center-zone {
