@@ -212,9 +212,11 @@ function dealCards(room) {
   }
 }
 
-function startGame(room) {
+function startGame(room, startRound = 0) {
+  const safeRound = Math.min(Math.max(Number.parseInt(startRound, 10) || 0, 0), ROUNDS.length - 1);
+
   room.started = true;
-  room.currentRound = 0;
+  room.currentRound = safeRound;
   room.currentPlayerIndex = 0;
   room.scores = {};
   room.tableCards = {};
@@ -224,7 +226,7 @@ function startGame(room) {
 
   room.deck = createDeck();
   room.discard = [];
-  room.tableMessage = `Ronda 1: ${ROUNDS[0].description}`;
+  room.tableMessage = `Ronda ${safeRound + 1}: ${ROUNDS[safeRound].description}`;
   dealCards(room);
   emitRoomState(room);
 }
@@ -321,7 +323,7 @@ io.on('connection', (socket) => {
     emitRoomState(room);
   });
 
-  socket.on('start-game', () => {
+  socket.on('start-game', (payload) => {
     const room = findRoomBySocketId(socket.id);
     if (!room) return;
 
@@ -330,7 +332,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    startGame(room);
+    const startRound = payload && payload.startRound !== undefined ? payload.startRound : 0;
+    startGame(room, startRound);
   });
 
   socket.on('draw-card', ({ fromDiscard }) => {
