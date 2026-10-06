@@ -207,6 +207,49 @@ function renderPlayers(room) {
     count.className = 'player-hand-count';
     count.textContent = `Cartas: ${player.handCount}`;
     seat.appendChild(count);
+
+    // Mostrar si se bajó
+    if (player.laidDown) {
+      const laidBadge = document.createElement('div');
+      laidBadge.className = 'laid-badge';
+      laidBadge.textContent = '✓ Bajado';
+      seat.appendChild(laidBadge);
+
+      // Mostrar cartas bajadas
+      if (room.laydowns && room.laydowns[player.id]) {
+        const laydown = room.laydowns[player.id];
+        const laidCards = document.createElement('div');
+        laidCards.className = 'laid-cards';
+
+        // Mostrar tríos
+        if (laydown.trios && laydown.trios.length) {
+          laydown.trios.forEach((trio) => {
+            const trioDisplay = document.createElement('div');
+            trioDisplay.className = 'laid-group trio';
+            trioDisplay.textContent = trio.map((cardId) => {
+              const card = playerHand.find((c) => c.id === cardId);
+              return card ? getCardDisplay(card) : '?';
+            }).join(' ');
+            laidCards.appendChild(trioDisplay);
+          });
+        }
+
+        // Mostrar escalas
+        if (laydown.escalas && laydown.escalas.length) {
+          laydown.escalas.forEach((escala) => {
+            const scaleDisplay = document.createElement('div');
+            scaleDisplay.className = 'laid-group scale';
+            scaleDisplay.textContent = escala.map((cardId) => {
+              const card = playerHand.find((c) => c.id === cardId);
+              return card ? getCardDisplay(card) : '?';
+            }).join(' ');
+            laidCards.appendChild(scaleDisplay);
+          });
+        }
+
+        seat.appendChild(laidCards);
+      }
+    }
   }
 }
 
