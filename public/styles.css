@@ -318,19 +318,26 @@ button:disabled {
 .card-back {
   width: 80px;
   height: 110px;
-  background: linear-gradient(135deg, #1e5d47, #0a2f24);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1e3a8a 100%);
+  border: 3px solid #d4af37;
   border-radius: 12px;
-  font-size: 2.5rem;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-back-pattern {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.04) 10px, rgba(255,255,255,0.04) 20px);
 }
 
 .deck-stack:hover .card-back {
   transform: translateY(-4px);
-  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .discard-pile:hover .discard-card {
@@ -429,7 +436,7 @@ button:disabled {
   padding: 6px;
   position: relative;
   user-select: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
@@ -448,6 +455,23 @@ button:disabled {
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.25);
 }
 
+.card.dragging {
+  opacity: 0.7;
+  transform: scale(1.05) rotate(5deg);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.card.drag-over {
+  border-color: var(--primary-strong);
+  box-shadow: 0 0 12px rgba(212, 168, 68, 0.6);
+  transform: scaleX(1.1);
+}
+
+.player-hand.dragging-active {
+  opacity: 0.8;
+}
+
 .card.joker {
   background: linear-gradient(135deg, var(--primary-strong), var(--primary));
   color: #1a1b1a;
@@ -462,6 +486,145 @@ button:disabled {
 .card-suit {
   font-size: 1.2rem;
   line-height: 1;
+}
+
+.laydown-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 12, 10, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.laydown-panel {
+  width: min(860px, 92vw);
+  background: rgba(14, 45, 36, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.laydown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.laydown-body {
+  display: grid;
+  gap: 16px;
+}
+
+.selection-area {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.laydown-hand {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 88px;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+}
+
+.mini-card {
+  width: 56px;
+  height: 78px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.08);
+  background: #fff;
+  color: #000;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.mini-card.selected {
+  border-color: var(--primary-strong);
+  box-shadow: 0 0 12px rgba(212, 168, 68, 0.55);
+}
+
+.action-row, .confirm-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.group-box {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+}
+
+.group-selection {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.group-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.group-pills {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty-group {
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-height: 40px;
+  display: grid;
+  place-items: center;
+}
+
+.laydown-status {
+  min-height: 24px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.laydown-status.error {
+  color: #ffb0b0;
+}
+
+.tiny-button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 0.8rem;
 }
 
 .room-meta {
@@ -503,5 +666,9 @@ button:disabled {
 
   .player-hand {
     justify-content: center;
+  }
+
+  .group-grid {
+    grid-template-columns: 1fr;
   }
 }
