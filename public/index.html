@@ -45,18 +45,30 @@
 
           <div class="button-row">
             <button id="create-room-btn" class="primary">Crear sala</button>
-            <button id="join-room-btn" class="secondary">Unirme</button>
           </div>
 
           <div class="join-by-code">
-            <input id="room-code" type="text" maxlength="5" placeholder="Código de sala" />
+            <input id="room-code" type="text" maxlength="5" placeholder="Código" style="width: 130px; margin-top: 0; text-transform: uppercase; text-align: center; letter-spacing: 0.15em;" />
             <button id="join-direct-btn">Entrar</button>
           </div>
 
           <div id="message-box" class="message-box"></div>
 
-          <!-- BOTÓN INICIAR PARTIDA EN LOBBY -->
+          <!-- INICIAR PARTIDA EN LOBBY -->
           <div id="start-game-section" class="start-game-section hidden">
+            <label>
+              Comenzar desde la etapa
+              <select id="start-round">
+                <option value="0" selected>1 - Dos tríos</option>
+                <option value="1">2 - Un trío y una escala</option>
+                <option value="2">3 - Dos escalas</option>
+                <option value="3">4 - Tres tríos</option>
+                <option value="4">5 - Dos tríos y una escala</option>
+                <option value="5">6 - Dos escalas y un trío</option>
+                <option value="6">7 - Escala faltante</option>
+                <option value="7">8 - Escala real</option>
+              </select>
+            </label>
             <button id="start-game-btn" class="primary">Iniciar partida</button>
           </div>
         </section>

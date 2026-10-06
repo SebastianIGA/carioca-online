@@ -16,10 +16,10 @@ const ui = {
   discardCount: document.getElementById('discard-count'),
   playerHand: document.getElementById('player-hand'),
   createRoomBtn: document.getElementById('create-room-btn'),
-  joinRoomBtn: document.getElementById('join-room-btn'),
   joinDirectBtn: document.getElementById('join-direct-btn'),
   startGameBtn: document.getElementById('start-game-btn'),
   startGameSection: document.getElementById('start-game-section'),
+  startRound: document.getElementById('start-round'),
   deckButton: document.getElementById('deck-button'),
   discardButton: document.getElementById('discard-button'),
   layDownBtn: document.getElementById('lay-down-btn'),
@@ -524,15 +524,18 @@ function bindEvents() {
     showMessage('Creando sala...', 'success');
   });
 
-  ui.joinRoomBtn.addEventListener('click', joinRoomByCode);
   ui.joinDirectBtn.addEventListener('click', joinRoomByCode);
+  ui.roomCode.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') joinRoomByCode();
+  });
 
   ui.startGameBtn.addEventListener('click', () => {
     if (!currentRoom || currentRoom.players.length < 2) {
       showMessage('Se necesitan al menos 2 jugadores para iniciar.', 'error');
       return;
     }
-    socket.emit('start-game');
+    const startRound = Number(ui.startRound.value) || 0;
+    socket.emit('start-game', { startRound });
     showMessage('Iniciando partida...', 'success');
   });
 
