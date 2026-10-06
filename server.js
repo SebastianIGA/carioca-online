@@ -40,6 +40,8 @@ function shuffle(array) {
 
 function createDeck() {
   const cards = [];
+  
+  // 2 mazos estándar
   for (let deck = 0; deck < 2; deck++) {
     SUITS.forEach((suit) => {
       VALUES.forEach((value) => {
@@ -52,11 +54,22 @@ function createDeck() {
       });
     });
   }
+
+  // 4 Jokers de 40 puntos
+  for (let i = 0; i < 4; i++) {
+    cards.push({
+      id: `joker-${i}-${uuidv4()}`,
+      suit: null,
+      value: 'JOKER',
+      isJoker: true
+    });
+  }
+
   return shuffle(cards);
 }
 
 function cardNumericValue(card) {
-  if (card.isJoker) return 25;
+  if (card.isJoker) return 40;
   const map = { 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, J: 10, Q: 10, K: 10, A: 15 };
   return map[card.value] || 0;
 }
@@ -111,7 +124,7 @@ function createRoom(name, maxPlayers = 4) {
     discard: [],
     tableMessage: 'Esperando jugadores...',
     scores: {},
-    tableCards: {} // { playerId: { trios: [[card,...]], scales: [[card,...]] } }
+    tableCards: {}
   };
   rooms.set(roomId, room);
   return room;
@@ -140,6 +153,7 @@ function serializeRoom(room) {
     discardTop: room.discard.length > 0 ? serializeCard(room.discard[room.discard.length - 1]) : null,
     discard: room.discard.slice(-10).map(serializeCard),
     tableMessage: room.tableMessage,
+    playerCount: room.players.length,
     tableCards: Object.fromEntries(
       Object.entries(room.tableCards).map(([playerId, groups]) => [
         playerId,
@@ -185,6 +199,7 @@ function dealCards(room) {
   room.players.forEach((player) => {
     player.hand = [];
     player.laidDown = false;
+    player.hasDrawn = false;
     for (let i = 0; i < handSize; i++) {
       if (room.deck.length > 0) {
         player.hand.push(room.deck.pop());
@@ -261,6 +276,7 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       hand: [],
       laidDown: false,
+      hasDrawn: false,
       isHost: true
     };
 
@@ -292,6 +308,7 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       hand: [],
       laidDown: false,
+      hasDrawn: false,
       isHost: false
     };
 
@@ -329,6 +346,11 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (player.hasDrawn) {
+      socket.emit('error-message', 'Ya robaste una carta este turno.');
+      return;
+    }
+
     let drawnCard;
     if (fromDiscard && room.discard.length > 0) {
       drawnCard = room.discard.pop();
@@ -342,6 +364,7 @@ io.on('connection', (socket) => {
     }
 
     player.hand.push(drawnCard);
+    player.hasDrawn = true;
     emitRoomState(room);
   });
 
@@ -366,11 +389,12 @@ io.on('connection', (socket) => {
 
     const card = player.hand.splice(cardIndex, 1)[0];
     room.discard.push(card);
-    room.tableMessage = `${player.name} descartó ${card.value}${card.suit}.`;
+    room.tableMessage = `${player.name} descartó ${card.value}${card.suit || ''}.`;
 
     if (player.hand.length === 0) {
       endRound(room, player);
     } else {
+      player.hasDrawn = false;
       room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
       emitRoomState(room);
     }
@@ -403,7 +427,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Resolver cartas ANTES de quitarlas de la mano
     const toCards = (ids) => ids.map((id) => player.hand.find((c) => c.id === id));
     const trioGroups = trios.map(toCards);
     const scaleGroups = escalas.map(toCards);
@@ -429,7 +452,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Quitar de la mano
     allIds.forEach((cardId) => {
       const idx = player.hand.findIndex((c) => c.id === cardId);
       if (idx !== -1) player.hand.splice(idx, 1);
