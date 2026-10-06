@@ -291,6 +291,38 @@ button:disabled {
 .player-hand-count {
   font-size: 0.8rem;
   color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.laid-badge {
+  font-size: 0.75rem;
+  color: var(--success);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.laid-cards {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.laid-group {
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(123, 211, 139, 0.15);
+  border: 1px solid rgba(123, 211, 139, 0.3);
+  color: #b4f2c5;
+  word-break: break-word;
+}
+
+.laid-group.scale {
+  background: rgba(212, 168, 68, 0.15);
+  border: 1px solid rgba(212, 168, 68, 0.3);
+  color: #f0c85b;
 }
 
 .center-zone {
