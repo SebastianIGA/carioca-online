@@ -35,6 +35,7 @@ const ui = {
 let currentRoom = null;
 let currentPlayerId = null;
 let playerHand = [];
+let localHandOrder = [];
 let draggedCardId = null;
 let laydownDraft = { trios: [], escalas: [] };
 let laydownSelection = [];
@@ -115,12 +116,33 @@ function validateLaydownDraft() {
   return { valid: true, message: 'Combinación válida.' };
 }
 
+function syncLocalHandOrder() {
+  const seen = new Set();
+  const nextOrder = [];
+
+  localHandOrder.forEach((cardId) => {
+    if (playerHand.some((card) => card.id === cardId) && !seen.has(cardId)) {
+      seen.add(cardId);
+      nextOrder.push(cardId);
+    }
+  });
+
+  playerHand.forEach((card) => {
+    if (!seen.has(card.id)) {
+      nextOrder.push(card.id);
+    }
+  });
+
+  localHandOrder = nextOrder;
+}
+
 function createCardElement(card, isPlayable = false, draggable = false, customClass = '') {
   const btn = document.createElement('button');
   btn.className = `card ${getCardColor(card)} ${customClass}`.trim();
   btn.dataset.cardId = card.id;
   btn.type = 'button';
   btn.draggable = draggable;
+  btn.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease';
 
   if (card.isJoker) {
     btn.innerHTML = '<div style="font-size: 2rem;">🂿</div>';
@@ -143,16 +165,30 @@ function createCardElement(card, isPlayable = false, draggable = false, customCl
   if (draggable) {
     btn.addEventListener('dragstart', (event) => {
       draggedCardId = card.id;
+      btn.classList.add('dragging');
       event.dataTransfer.effectAllowed = 'move';
+      ui.playerHand.classList.add('dragging-active');
+    });
+
+    btn.addEventListener('dragend', () => {
+      btn.classList.remove('dragging');
+      ui.playerHand.classList.remove('dragging-active');
+      draggedCardId = null;
     });
 
     btn.addEventListener('dragover', (event) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
+      btn.classList.add('drag-over');
+    });
+
+    btn.addEventListener('dragleave', () => {
+      btn.classList.remove('drag-over');
     });
 
     btn.addEventListener('drop', (event) => {
       event.preventDefault();
+      btn.classList.remove('drag-over');
       if (!draggedCardId || draggedCardId === card.id) return;
       reorderHand(draggedCardId, card.id);
       draggedCardId = null;
@@ -165,6 +201,7 @@ function createCardElement(card, isPlayable = false, draggable = false, customCl
 function renderPlayers(room) {
   for (let i = 0; i < 4; i++) {
     const seat = document.getElementById(`player-${i}`);
+    if (!seat) continue;
     seat.innerHTML = '';
     const player = room.players[i];
 
@@ -202,33 +239,41 @@ function renderHand() {
   ui.playerHand.innerHTML = '';
   const isMyTurn = currentRoom && currentRoom.currentPlayer && currentRoom.currentPlayer.id === currentPlayerId;
 
-  if (!currentRoom || !playerHand) {
+  if (!currentRoom || !playerHand.length) {
     return;
   }
 
-  playerHand.forEach((card) => {
+  const orderedCards = localHandOrder
+    .map((cardId) => playerHand.find((card) => card.id === cardId))
+    .filter(Boolean);
+
+  const missing = playerHand.filter((card) => !localHandOrder.includes(card.id));
+  const finalOrder = [...orderedCards, ...missing];
+
+  finalOrder.forEach((card) => {
     const cardEl = createCardElement(card, isMyTurn, true);
     ui.playerHand.appendChild(cardEl);
   });
 }
 
 function reorderHand(fromCardId, toCardId) {
-  const fromIndex = playerHand.findIndex((card) => card.id === fromCardId);
-  const toIndex = playerHand.findIndex((card) => card.id === toCardId);
+  const fromIndex = localHandOrder.indexOf(fromCardId);
+  const toIndex = localHandOrder.indexOf(toCardId);
 
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+  if (fromIndex < 0 || toIndex < 0) return;
 
-  const updated = [...playerHand];
-  const [movedCard] = updated.splice(fromIndex, 1);
-  updated.splice(toIndex, 0, movedCard);
-  playerHand = updated;
+  const updated = [...localHandOrder];
+  const [moved] = updated.splice(fromIndex, 1);
+  updated.splice(toIndex, 0, moved);
+  localHandOrder = updated;
   renderHand();
-  renderLaydownHand();
 }
 
 function updateStartButton(room) {
   const hasEnoughPlayers = room && room.players && room.players.length >= 2;
-  ui.startGameSection.classList.toggle('hidden', !hasEnoughPlayers || room.started);
+  if (ui.startGameSection) {
+    ui.startGameSection.classList.toggle('hidden', !hasEnoughPlayers || room.started);
+  }
 }
 
 function joinRoomByCode() {
@@ -271,9 +316,9 @@ function renderRoom(room) {
   if (room.started) {
     ui.lobbyPanel.classList.add('hidden');
     ui.gamePanel.classList.remove('hidden');
-    ui.startGameBtn.classList.add('hidden');
-    ui.deckButton.disabled = currentRoom.currentPlayer?.id !== currentPlayerId;
-    ui.discardButton.disabled = currentRoom.currentPlayer?.id !== currentPlayerId;
+    if (ui.startGameBtn) ui.startGameBtn.classList.add('hidden');
+    if (ui.deckButton) ui.deckButton.disabled = currentRoom.currentPlayer?.id !== currentPlayerId;
+    if (ui.discardButton) ui.discardButton.disabled = currentRoom.currentPlayer?.id !== currentPlayerId;
   } else {
     ui.gamePanel.classList.add('hidden');
     ui.lobbyPanel.classList.remove('hidden');
@@ -281,6 +326,7 @@ function renderRoom(room) {
 }
 
 function renderLaydownHand() {
+  if (!ui.layDownHand) return;
   ui.layDownHand.innerHTML = '';
   if (!playerHand.length) {
     ui.layDownStatus.textContent = 'No hay cartas disponibles para bajar.';
@@ -307,6 +353,8 @@ function renderLaydownHand() {
 }
 
 function renderLaydownGroups() {
+  if (!ui.triosSelection || !ui.scalesSelection) return;
+
   const renderGroup = (key, label) => {
     const list = key === 'trios' ? ui.triosSelection : ui.scalesSelection;
     list.innerHTML = '';
@@ -358,17 +406,18 @@ function openLayDownModal() {
   laydownSelection = [];
   renderLaydownHand();
   renderLaydownGroups();
-  ui.layDownStatus.textContent = 'Selecciona cartas y agrega cada grupo a Tríos o Escalas.';
-  ui.layDownModal.classList.remove('hidden');
+  if (ui.layDownStatus) ui.layDownStatus.textContent = 'Selecciona cartas y agrega cada grupo a Tríos o Escalas.';
+  if (ui.layDownModal) ui.layDownModal.classList.remove('hidden');
 }
 
 function closeLayDownModal() {
-  ui.layDownModal.classList.add('hidden');
+  if (ui.layDownModal) ui.layDownModal.classList.add('hidden');
   laydownSelection = [];
   laydownDraft = { trios: [], escalas: [] };
 }
 
 function addSelectedToGroup(type) {
+  if (!ui.layDownStatus) return;
   if (!laydownSelection.length) {
     ui.layDownStatus.textContent = 'Primero selecciona cartas.';
     ui.layDownStatus.classList.add('error');
@@ -385,6 +434,7 @@ function addSelectedToGroup(type) {
 }
 
 function confirmLayDown() {
+  if (!ui.layDownStatus) return;
   const result = validateLaydownDraft();
   if (!result.valid) {
     ui.layDownStatus.textContent = result.message;
@@ -437,28 +487,39 @@ function bindEvents() {
     showMessage('Iniciando partida...', 'success');
   });
 
-  ui.deckButton.addEventListener('click', () => {
-    socket.emit('draw-card', { fromDiscard: false });
-  });
+  if (ui.deckButton) {
+    ui.deckButton.addEventListener('click', () => {
+      socket.emit('draw-card', { fromDiscard: false });
+    });
+  }
 
-  ui.discardButton.addEventListener('click', () => {
-    socket.emit('draw-card', { fromDiscard: true });
-  });
+  if (ui.discardButton) {
+    ui.discardButton.addEventListener('click', () => {
+      socket.emit('draw-card', { fromDiscard: true });
+    });
+  }
 
-  ui.layDownBtn.addEventListener('click', () => {
-    openLayDownModal();
-  });
+  if (ui.layDownBtn) {
+    ui.layDownBtn.addEventListener('click', () => {
+      openLayDownModal();
+    });
+  }
 
-  ui.confirmLayDownBtn.addEventListener('click', confirmLayDown);
-  ui.cancelLayDownBtn.addEventListener('click', closeLayDownModal);
+  if (ui.confirmLayDownBtn) {
+    ui.confirmLayDownBtn.addEventListener('click', confirmLayDown);
+  }
+
+  if (ui.cancelLayDownBtn) {
+    ui.cancelLayDownBtn.addEventListener('click', closeLayDownModal);
+  }
 
   const addTriosBtn = document.getElementById('add-trios-btn');
   const addScalesBtn = document.getElementById('add-scales-btn');
-  
+
   if (addTriosBtn) {
     addTriosBtn.addEventListener('click', () => addSelectedToGroup('trios'));
   }
-  
+
   if (addScalesBtn) {
     addScalesBtn.addEventListener('click', () => addSelectedToGroup('escalas'));
   }
@@ -479,12 +540,47 @@ socket.on('joined-room', ({ roomId, playerId }) => {
 
 socket.on('room-state', (room) => {
   console.log('room-state recibido:', room);
+  const previousCards = [...playerHand.map((card) => card.id)];
+
+  currentRoom = room;
+  if (room.started && room.currentPlayer && room.currentPlayer.id === currentPlayerId) {
+    if (playerHand.length) {
+      localHandOrder = [...localHandOrder.filter((id) => room.players.some((p) => p.id === currentPlayerId) || true)];
+    }
+  }
+
   renderRoom(room);
+
+  if (!localHandOrder.length && playerHand.length) {
+    localHandOrder = playerHand.map((card) => card.id);
+  } else {
+    syncLocalHandOrder();
+  }
+
+  if (previousCards.length !== playerHand.length) {
+    const newCards = playerHand.filter((card) => !localHandOrder.includes(card.id));
+    if (newCards.length) {
+      localHandOrder = [...localHandOrder, ...newCards.map((card) => card.id)];
+    }
+  }
+
+  renderHand();
 });
 
 socket.on('player-hand', ({ hand }) => {
+  const previousOrder = [...localHandOrder];
+  const previousIds = new Set(playerHand.map((card) => card.id));
+
   playerHand = hand;
+
+  const nextLocal = [...previousOrder.filter((id) => hand.some((card) => card.id === id))];
+  const newCards = hand.filter((card) => !previousIds.has(card.id));
+
+  newCards.forEach((card) => nextLocal.push(card.id));
+  localHandOrder = nextLocal;
+
   renderHand();
+
   if (ui.layDownModal && !ui.layDownModal.classList.contains('hidden')) {
     renderLaydownHand();
   }
