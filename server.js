@@ -19,14 +19,14 @@ const VALUES = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
 
 // Rondas correctas del Carioca clásico según tu especificación
 const ROUNDS = [
-  { number: 1, name: '2 Tríos', description: 'Dos tríos' },
-  { number: 2, name: '1 Trío + 1 Escala', description: 'Un trío y una escala' },
-  { number: 3, name: '2 Escalas', description: 'Dos escalas' },
-  { number: 4, name: '3 Tríos', description: 'Tres tríos' },
-  { number: 5, name: '2 Tríos + 1 Escala', description: 'Dos tríos y una escala' },
-  { number: 6, name: '2 Escalas + 1 Trío', description: 'Dos escalas y un trío' },
-  { number: 7, name: 'Escala Faltante', description: 'Escala del A al K sin pinta' },
-  { number: 8, name: 'Escala Real', description: 'Escala del A al K de la misma pinta' }
+  { number: 1, name: '2 Tríos', description: 'Dos tríos', requiredTrios: 2, requiredScales: 0 },
+  { number: 2, name: '1 Trío + 1 Escala', description: 'Un trío y una escala', requiredTrios: 1, requiredScales: 1 },
+  { number: 3, name: '2 Escalas', description: 'Dos escalas', requiredTrios: 0, requiredScales: 2 },
+  { number: 4, name: '3 Tríos', description: 'Tres tríos', requiredTrios: 3, requiredScales: 0 },
+  { number: 5, name: '2 Tríos + 1 Escala', description: 'Dos tríos y una escala', requiredTrios: 2, requiredScales: 1 },
+  { number: 6, name: '2 Escalas + 1 Trío', description: 'Dos escalas y un trío', requiredTrios: 1, requiredScales: 2 },
+  { number: 7, name: 'Escala Faltante', description: 'Escala del A al K sin pinta', requiredTrios: 0, requiredScales: 1 },
+  { number: 8, name: 'Escala Real', description: 'Escala del A al K de la misma pinta', requiredTrios: 0, requiredScales: 1 }
 ];
 
 const rooms = new Map();
@@ -64,6 +64,33 @@ function cardNumericValue(card) {
   return map[card.value] || 0;
 }
 
+function cardRank(card) {
+  if (card.isJoker) return 99;
+  const map = { 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, J: 11, Q: 12, K: 13, A: 14 };
+  return map[card.value] || 0;
+}
+
+function isValidTrio(cards) {
+  if (cards.length < 3) return false;
+  const normal = cards.filter((c) => !c.isJoker);
+  if (normal.length === 0) return false;
+  const ranks = normal.map((c) => cardRank(c));
+  return new Set(ranks).size === 1;
+}
+
+function isValidScale(cards) {
+  if (cards.length < 4) return false;
+  const normal = cards.filter((c) => !c.isJoker);
+  if (normal.length === 0) return false;
+  if (new Set(normal.map((c) => c.suit)).size !== 1) return false;
+  const ranks = normal.map((c) => cardRank(c)).sort((a, b) => a - b);
+  if (new Set(ranks).size !== ranks.length) return false;
+  const jokers = cards.length - normal.length;
+  let gaps = 0;
+  for (let i = 1; i < ranks.length; i++) gaps += ranks[i] - ranks[i - 1] - 1;
+  return gaps <= jokers;
+}
+
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -86,7 +113,8 @@ function createRoom(name, maxPlayers = 4) {
     deck: [],
     discard: [],
     tableMessage: 'Esperando jugadores...',
-    scores: {}
+    scores: {},
+    laydowns: {} // { playerId: { trios: [[cardIds]], escalas: [[cardIds]] } }
   };
   rooms.set(roomId, room);
   return room;
@@ -113,7 +141,9 @@ function serializeRoom(room) {
     currentPlayer: currentPlayer ? { id: currentPlayer.id, name: currentPlayer.name } : null,
     deckCount: room.deck.length,
     discardTop: room.discard.length > 0 ? serializeCard(room.discard[room.discard.length - 1]) : null,
+    discard: room.discard.slice(-10).map(serializeCard),
     tableMessage: room.tableMessage,
+    laydowns: room.laydowns,
     players: room.players.map((player) => ({
       id: player.id,
       name: player.name,
@@ -121,7 +151,8 @@ function serializeRoom(room) {
       handCount: player.hand.length,
       score: room.scores[player.id] || 0,
       isHost: player.isHost,
-      isCurrent: player.id === currentPlayer?.id
+      isCurrent: player.id === currentPlayer?.id,
+      laidDown: player.laidDown
     }))
   };
 }
@@ -166,6 +197,7 @@ function startGame(room) {
   room.currentRound = 0;
   room.currentPlayerIndex = 0;
   room.scores = {};
+  room.laydowns = {};
   room.players.forEach((player) => {
     room.scores[player.id] = 0;
   });
@@ -191,6 +223,7 @@ function endRound(room) {
     room.currentPlayerIndex = 0;
     room.deck = createDeck();
     room.discard = [];
+    room.laydowns = {};
     room.tableMessage = `Ronda ${room.currentRound + 1}: ${ROUNDS[room.currentRound].description}`;
     dealCards(room);
   } else {
@@ -329,15 +362,69 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('lay-down', () => {
+  socket.on('lay-down', ({ trios, escalas, selectedCards }) => {
     const room = findRoomBySocketId(socket.id);
     if (!room || !room.started) return;
 
     const player = room.players.find((p) => p.socketId === socket.id);
     if (!player) return;
 
+    const currentPlayer = room.players[room.currentPlayerIndex];
+    if (currentPlayer.id !== player.id) {
+      socket.emit('error-message', 'No es tu turno.');
+      return;
+    }
+
+    if (player.laidDown) {
+      socket.emit('error-message', 'Ya te bajaste en esta ronda.');
+      return;
+    }
+
+    // Validar que existan los tríos y escalas según la ronda
+    const round = ROUNDS[room.currentRound];
+    if (trios.length !== round.requiredTrios || escalas.length !== round.requiredScales) {
+      socket.emit('error-message', `Esta ronda requiere ${round.requiredTrios} tríos y ${round.requiredScales} escalas.`);
+      return;
+    }
+
+    // Validar cada trío
+    const allTrioCards = trios.flat();
+    for (const trioIds of trios) {
+      const cards = trioIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
+      if (!isValidTrio(cards)) {
+        socket.emit('error-message', 'Uno o más tríos no son válidos.');
+        return;
+      }
+    }
+
+    // Validar cada escala
+    const allScaleCards = escalas.flat();
+    for (const scaleIds of escalas) {
+      const cards = scaleIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
+      if (!isValidScale(cards)) {
+        socket.emit('error-message', 'Una o más escalas no son válidas.');
+        return;
+      }
+    }
+
+    // Verificar que no haya cartas duplicadas
+    const allIds = [...allTrioCards, ...allScaleCards];
+    if (new Set(allIds).size !== allIds.length) {
+      socket.emit('error-message', 'Una carta está en dos grupos.');
+      return;
+    }
+
+    // Remover cartas de la mano
+    allIds.forEach((cardId) => {
+      const idx = player.hand.findIndex((c) => c.id === cardId);
+      if (idx !== -1) player.hand.splice(idx, 1);
+    });
+
+    // Guardar la bajada
     player.laidDown = true;
-    room.tableMessage = `${player.name} se bajó en la ronda.`;
+    room.laydowns[player.id] = { trios, escalas };
+    room.tableMessage = `${player.name} se bajó con ${trios.length} tríos y ${escalas.length} escalas.`;
+
     emitRoomState(room);
   });
 
