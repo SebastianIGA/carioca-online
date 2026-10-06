@@ -231,6 +231,19 @@ function updateStartButton(room) {
   ui.startGameSection.classList.toggle('hidden', !hasEnoughPlayers || room.started);
 }
 
+function joinRoomByCode() {
+  const roomId = ui.roomCode.value.trim().toUpperCase();
+  const name = ui.playerName.value.trim() || 'Jugador';
+
+  if (!roomId) {
+    showMessage('Ingresa un código de sala.', 'error');
+    return;
+  }
+
+  socket.emit('join-room', { roomId, name });
+  showMessage('Uniéndote a la sala...', 'success');
+}
+
 function renderRoom(room) {
   currentRoom = room;
   ui.roomBadge.textContent = room.id;
@@ -439,12 +452,22 @@ function bindEvents() {
   ui.confirmLayDownBtn.addEventListener('click', confirmLayDown);
   ui.cancelLayDownBtn.addEventListener('click', closeLayDownModal);
 
-  document.getElementById('add-trios-btn').addEventListener('click', () => addSelectedToGroup('trios'));
-  document.getElementById('add-scales-btn').addEventListener('click', () => addSelectedToGroup('escalas'));
+  const addTriosBtn = document.getElementById('add-trios-btn');
+  const addScalesBtn = document.getElementById('add-scales-btn');
+  
+  if (addTriosBtn) {
+    addTriosBtn.addEventListener('click', () => addSelectedToGroup('trios'));
+  }
+  
+  if (addScalesBtn) {
+    addScalesBtn.addEventListener('click', () => addSelectedToGroup('escalas'));
+  }
 
-  ui.layDownModal.addEventListener('click', (event) => {
-    if (event.target === ui.layDownModal) closeLayDownModal();
-  });
+  if (ui.layDownModal) {
+    ui.layDownModal.addEventListener('click', (event) => {
+      if (event.target === ui.layDownModal) closeLayDownModal();
+    });
+  }
 }
 
 socket.on('joined-room', ({ roomId, playerId }) => {
@@ -462,7 +485,7 @@ socket.on('room-state', (room) => {
 socket.on('player-hand', ({ hand }) => {
   playerHand = hand;
   renderHand();
-  if (!ui.layDownModal.classList.contains('hidden')) {
+  if (ui.layDownModal && !ui.layDownModal.classList.contains('hidden')) {
     renderLaydownHand();
   }
 });
