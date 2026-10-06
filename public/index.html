@@ -115,6 +115,48 @@
       </main>
     </div>
 
+    <!-- MODAL DE BAJARSE -->
+    <div id="laydown-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Selecciona tus cartas</h3>
+        
+        <div class="laydown-container">
+          <!-- Cartas disponibles -->
+          <div class="laydown-section">
+            <h4>Cartas disponibles</h4>
+            <div id="laydown-hand" class="laydown-hand"></div>
+          </div>
+
+          <!-- Botones de agregar a tríos/escalas -->
+          <div class="laydown-buttons">
+            <button id="add-trios-btn" class="secondary small">Agregar a Tríos</button>
+            <button id="add-scales-btn" class="secondary small">Agregar a Escalas</button>
+          </div>
+
+          <!-- Tríos seleccionados -->
+          <div class="laydown-section">
+            <h4>Tríos</h4>
+            <div id="trios-selection" class="groups-list"></div>
+          </div>
+
+          <!-- Escalas seleccionadas -->
+          <div class="laydown-section">
+            <h4>Escalas</h4>
+            <div id="scales-selection" class="groups-list"></div>
+          </div>
+        </div>
+
+        <!-- Mensaje de estado -->
+        <div id="laydown-status" class="laydown-status"></div>
+
+        <!-- Botones de acción -->
+        <div class="modal-actions">
+          <button id="confirm-laydown-btn" class="primary">Confirmar</button>
+          <button id="cancel-laydown-btn" class="secondary">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/app.js"></script>
   </body>
