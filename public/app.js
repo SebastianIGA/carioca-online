@@ -22,12 +22,22 @@ const ui = {
   startGameSection: document.getElementById('start-game-section'),
   deckButton: document.getElementById('deck-button'),
   discardButton: document.getElementById('discard-button'),
-  layDownBtn: document.getElementById('lay-down-btn')
+  layDownBtn: document.getElementById('lay-down-btn'),
+  layDownModal: document.getElementById('laydown-modal'),
+  layDownHand: document.getElementById('laydown-hand'),
+  triosSelection: document.getElementById('trios-selection'),
+  scalesSelection: document.getElementById('scales-selection'),
+  confirmLayDownBtn: document.getElementById('confirm-laydown-btn'),
+  cancelLayDownBtn: document.getElementById('cancel-laydown-btn'),
+  layDownStatus: document.getElementById('laydown-status')
 };
 
 let currentRoom = null;
 let currentPlayerId = null;
 let playerHand = [];
+let draggedCardId = null;
+let laydownDraft = { trios: [], escalas: [] };
+let laydownSelection = [];
 
 function showMessage(text, type = '') {
   ui.messageBox.textContent = text;
@@ -46,11 +56,71 @@ function getCardColor(card) {
   return card.suit === '♥' || card.suit === '♦' ? 'red' : 'black';
 }
 
-function createCardElement(card, isPlayable = false) {
+function getCardById(cardId) {
+  return playerHand.find((card) => card.id === cardId) || null;
+}
+
+function cardRank(card) {
+  if (card.isJoker) return 99;
+  if (typeof card.value === 'number') return card.value;
+  const map = { J: 11, Q: 12, K: 13, A: 14 };
+  return map[card.value] || 0;
+}
+
+function normalizeCards(cardIds) {
+  return cardIds
+    .map((id) => getCardById(id))
+    .filter(Boolean);
+}
+
+function isValidTrio(cardIds) {
+  const cards = normalizeCards(cardIds);
+  if (cards.length !== 3) return false;
+  const values = cards.map((card) => cardRank(card));
+  return new Set(values).size === 1;
+}
+
+function isValidScale(cardIds) {
+  const cards = normalizeCards(cardIds);
+  if (cards.length < 3) return false;
+  const sorted = [...cards].sort((a, b) => cardRank(a) - cardRank(b));
+  const sameSuit = new Set(sorted.map((card) => card.suit)).size === 1;
+  if (!sameSuit) return false;
+  const values = sorted.map((card) => cardRank(card));
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] - values[i - 1] !== 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateLaydownDraft() {
+  const allCards = [...laydownDraft.trios.flat(), ...laydownDraft.escalas.flat()];
+  if (allCards.length === 0) return { valid: false, message: 'Debes elegir al menos una combinación.' };
+  if (new Set(allCards).size !== allCards.length) return { valid: false, message: 'No puedes repetir la misma carta en dos grupos.' };
+
+  const invalidGroup = [...laydownDraft.trios, ...laydownDraft.escalas].find((group) => {
+    if (group.length === 0) return true;
+    return !((group.length >= 3) && (
+      (group.length === 3 && isValidTrio(group)) ||
+      (group.length >= 3 && isValidScale(group))
+    ));
+  });
+
+  if (invalidGroup) {
+    return { valid: false, message: 'Una o más combinaciones no son válidas. Recuerda: tríos = mismo valor, escaleras = mismo palo y consecutivas.' };
+  }
+
+  return { valid: true, message: 'Combinación válida.' };
+}
+
+function createCardElement(card, isPlayable = false, draggable = false, customClass = '') {
   const btn = document.createElement('button');
-  btn.className = `card ${getCardColor(card)}`;
+  btn.className = `card ${getCardColor(card)} ${customClass}`.trim();
   btn.dataset.cardId = card.id;
   btn.type = 'button';
+  btn.draggable = draggable;
 
   if (card.isJoker) {
     btn.innerHTML = '<div style="font-size: 2rem;">🂿</div>';
@@ -68,6 +138,25 @@ function createCardElement(card, isPlayable = false) {
     });
   } else {
     btn.disabled = true;
+  }
+
+  if (draggable) {
+    btn.addEventListener('dragstart', (event) => {
+      draggedCardId = card.id;
+      event.dataTransfer.effectAllowed = 'move';
+    });
+
+    btn.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+    });
+
+    btn.addEventListener('drop', (event) => {
+      event.preventDefault();
+      if (!draggedCardId || draggedCardId === card.id) return;
+      reorderHand(draggedCardId, card.id);
+      draggedCardId = null;
+    });
   }
 
   return btn;
@@ -118,9 +207,23 @@ function renderHand() {
   }
 
   playerHand.forEach((card) => {
-    const cardEl = createCardElement(card, isMyTurn);
+    const cardEl = createCardElement(card, isMyTurn, true);
     ui.playerHand.appendChild(cardEl);
   });
+}
+
+function reorderHand(fromCardId, toCardId) {
+  const fromIndex = playerHand.findIndex((card) => card.id === fromCardId);
+  const toIndex = playerHand.findIndex((card) => card.id === toCardId);
+
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+
+  const updated = [...playerHand];
+  const [movedCard] = updated.splice(fromIndex, 1);
+  updated.splice(toIndex, 0, movedCard);
+  playerHand = updated;
+  renderHand();
+  renderLaydownHand();
 }
 
 function updateStartButton(room) {
@@ -164,17 +267,136 @@ function renderRoom(room) {
   }
 }
 
-function joinRoomByCode() {
-  const roomId = ui.roomCode.value.trim().toUpperCase();
-  const name = ui.playerName.value.trim() || 'Jugador';
-
-  if (!roomId) {
-    showMessage('Ingresa un código de sala.', 'error');
+function renderLaydownHand() {
+  ui.layDownHand.innerHTML = '';
+  if (!playerHand.length) {
+    ui.layDownStatus.textContent = 'No hay cartas disponibles para bajar.';
     return;
   }
 
-  socket.emit('join-room', { roomId, name });
-  showMessage('Uniéndote a la sala...', 'success');
+  playerHand.forEach((card) => {
+    const isSelected = laydownSelection.includes(card.id);
+    const cardButton = document.createElement('button');
+    cardButton.type = 'button';
+    cardButton.className = `mini-card ${isSelected ? 'selected' : ''} ${getCardColor(card)}`;
+    cardButton.dataset.cardId = card.id;
+    cardButton.innerHTML = card.isJoker ? '🂿' : `${card.value}${card.suit}`;
+    cardButton.addEventListener('click', () => {
+      if (laydownSelection.includes(card.id)) {
+        laydownSelection = laydownSelection.filter((id) => id !== card.id);
+      } else {
+        laydownSelection = [...laydownSelection, card.id];
+      }
+      renderLaydownHand();
+    });
+    ui.layDownHand.appendChild(cardButton);
+  });
+}
+
+function renderLaydownGroups() {
+  const renderGroup = (key, label) => {
+    const list = key === 'trios' ? ui.triosSelection : ui.scalesSelection;
+    list.innerHTML = '';
+    const groups = laydownDraft[key];
+
+    if (!groups.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-group';
+      empty.textContent = `Sin ${label.toLowerCase()} seleccionados`;
+      list.appendChild(empty);
+      return;
+    }
+
+    groups.forEach((group, index) => {
+      const row = document.createElement('div');
+      row.className = 'group-row';
+
+      const pills = document.createElement('div');
+      pills.className = 'group-pills';
+      const cardsText = group.map((cardId) => getCardById(cardId)).filter(Boolean).map((card) => `${card.value}${card.suit}`).join(' ');
+      pills.textContent = cardsText || 'Sin cartas';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'tiny-button';
+      removeBtn.textContent = 'Quitar';
+      removeBtn.addEventListener('click', () => {
+        laydownDraft[key] = laydownDraft[key].filter((_, i) => i !== index);
+        renderLaydownGroups();
+      });
+
+      row.appendChild(pills);
+      row.appendChild(removeBtn);
+      list.appendChild(row);
+    });
+  };
+
+  renderGroup('trios', 'Tríos');
+  renderGroup('escalas', 'Escalas');
+}
+
+function openLayDownModal() {
+  if (!currentRoom || !playerHand.length) {
+    showMessage('No tienes cartas para bajar.', 'error');
+    return;
+  }
+
+  laydownDraft = { trios: [], escalas: [] };
+  laydownSelection = [];
+  renderLaydownHand();
+  renderLaydownGroups();
+  ui.layDownStatus.textContent = 'Selecciona cartas y agrega cada grupo a Tríos o Escalas.';
+  ui.layDownModal.classList.remove('hidden');
+}
+
+function closeLayDownModal() {
+  ui.layDownModal.classList.add('hidden');
+  laydownSelection = [];
+  laydownDraft = { trios: [], escalas: [] };
+}
+
+function addSelectedToGroup(type) {
+  if (!laydownSelection.length) {
+    ui.layDownStatus.textContent = 'Primero selecciona cartas.';
+    ui.layDownStatus.classList.add('error');
+    return;
+  }
+
+  const selected = [...laydownSelection];
+  laydownDraft[type].push(selected);
+  laydownSelection = [];
+  renderLaydownHand();
+  renderLaydownGroups();
+  ui.layDownStatus.textContent = `Se agregaron ${selected.length} cartas a ${type === 'trios' ? 'Tríos' : 'Escalas'}.`;
+  ui.layDownStatus.classList.remove('error');
+}
+
+function confirmLayDown() {
+  const result = validateLaydownDraft();
+  if (!result.valid) {
+    ui.layDownStatus.textContent = result.message;
+    ui.layDownStatus.classList.add('error');
+    return;
+  }
+
+  const allSelected = [...laydownDraft.trios.flat(), ...laydownDraft.escalas.flat()];
+  const remaining = playerHand.filter((card) => !allSelected.includes(card.id));
+
+  const validRemaining = remaining.length >= 0;
+  if (!validRemaining) {
+    ui.layDownStatus.textContent = 'No puedes bajar cartas que no están en tu mano.';
+    ui.layDownStatus.classList.add('error');
+    return;
+  }
+
+  socket.emit('lay-down', {
+    trios: laydownDraft.trios,
+    escalas: laydownDraft.escalas,
+    selectedCards: allSelected
+  });
+
+  closeLayDownModal();
+  showMessage('Combinación válida. Esperando turno o confirmación del servidor.', 'success');
 }
 
 function bindEvents() {
@@ -211,7 +433,17 @@ function bindEvents() {
   });
 
   ui.layDownBtn.addEventListener('click', () => {
-    socket.emit('lay-down');
+    openLayDownModal();
+  });
+
+  ui.confirmLayDownBtn.addEventListener('click', confirmLayDown);
+  ui.cancelLayDownBtn.addEventListener('click', closeLayDownModal);
+
+  document.getElementById('add-trios-btn').addEventListener('click', () => addSelectedToGroup('trios'));
+  document.getElementById('add-scales-btn').addEventListener('click', () => addSelectedToGroup('escalas'));
+
+  ui.layDownModal.addEventListener('click', (event) => {
+    if (event.target === ui.layDownModal) closeLayDownModal();
   });
 }
 
@@ -230,6 +462,9 @@ socket.on('room-state', (room) => {
 socket.on('player-hand', ({ hand }) => {
   playerHand = hand;
   renderHand();
+  if (!ui.layDownModal.classList.contains('hidden')) {
+    renderLaydownHand();
+  }
 });
 
 socket.on('error-message', (message) => {
