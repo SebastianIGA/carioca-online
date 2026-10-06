@@ -39,7 +39,6 @@ let currentPlayerId = null;
 let playerHand = [];
 let localHandOrder = [];
 let draggedCardId = null;
-let draggedFromTable = null;
 let laydownDraft = { trios: [], escalas: [] };
 let laydownSelection = [];
 
@@ -51,6 +50,12 @@ function showMessage(text, type = '') {
 
 function isMyTurn() {
   return !!(currentRoom && currentRoom.currentPlayer && currentRoom.currentPlayer.id === currentPlayerId);
+}
+
+function haveILaidDown() {
+  if (!currentRoom) return false;
+  const me = currentRoom.players.find((p) => p.id === currentPlayerId);
+  return !!(me && me.laidDown);
 }
 
 function mustDrawFirst() {
@@ -75,7 +80,7 @@ function getCardById(cardId) {
 function cardRank(card) {
   if (card.isJoker) return 99;
   if (typeof card.value === 'number') return card.value;
-  const map = { A: 1, J: 11, Q: 12, K: 13 };
+  const map = { A: 14, J: 11, Q: 12, K: 13 };
   return map[card.value] || Number(card.value) || 0;
 }
 
@@ -97,15 +102,17 @@ function updateActionButtons() {
   const myTurn = isMyTurn();
   ui.deckButton.disabled = !myTurn;
   ui.discardButton.disabled = !myTurn;
+  // Si ya me bajé, el botón desaparece
+  ui.layDownBtn.classList.toggle('hidden', haveILaidDown());
   ui.layDownBtn.disabled = !myTurn;
 }
 
-function createCardElement(card, options = {}) {
+function createCardElement(card) {
   const btn = document.createElement('button');
   btn.className = `card ${getCardColor(card)}`;
   btn.dataset.cardId = card.id;
   btn.type = 'button';
-  btn.draggable = !options.readOnly;
+  btn.draggable = true;
 
   if (card.isJoker) {
     btn.innerHTML = '<div style="font-size: 2rem;">🂿</div>';
@@ -117,50 +124,47 @@ function createCardElement(card, options = {}) {
     `;
   }
 
-  if (!options.readOnly) {
-    btn.addEventListener('click', () => {
-      if (!isMyTurn()) return;
-      if (mustDrawFirst()) {
-        showMessage(MUST_DRAW_MESSAGE, 'error');
-        return;
-      }
-      socket.emit('discard-card', { cardId: card.id });
-    });
+  btn.addEventListener('click', () => {
+    if (!isMyTurn()) return;
+    if (mustDrawFirst()) {
+      showMessage(MUST_DRAW_MESSAGE, 'error');
+      return;
+    }
+    socket.emit('discard-card', { cardId: card.id });
+  });
 
-    btn.addEventListener('dragstart', (event) => {
-      draggedCardId = card.id;
-      draggedFromTable = null;
-      btn.classList.add('dragging');
-      ui.playerHand.classList.add('dragging-active');
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', card.id);
-    });
+  btn.addEventListener('dragstart', (event) => {
+    draggedCardId = card.id;
+    btn.classList.add('dragging');
+    ui.playerHand.classList.add('dragging-active');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', card.id);
+  });
 
-    btn.addEventListener('dragend', () => {
-      btn.classList.remove('dragging');
-      ui.playerHand.classList.remove('dragging-active');
-      document.querySelectorAll('.card.drag-over').forEach((el) => el.classList.remove('drag-over'));
-      draggedCardId = null;
-    });
+  btn.addEventListener('dragend', () => {
+    btn.classList.remove('dragging');
+    ui.playerHand.classList.remove('dragging-active');
+    document.querySelectorAll('.card.drag-over').forEach((el) => el.classList.remove('drag-over'));
+    draggedCardId = null;
+  });
 
-    btn.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      btn.classList.add('drag-over');
-    });
+  btn.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    btn.classList.add('drag-over');
+  });
 
-    btn.addEventListener('dragleave', () => {
-      btn.classList.remove('drag-over');
-    });
+  btn.addEventListener('dragleave', () => {
+    btn.classList.remove('drag-over');
+  });
 
-    btn.addEventListener('drop', (event) => {
-      event.preventDefault();
-      btn.classList.remove('drag-over');
-      if (!draggedCardId || draggedCardId === card.id) return;
-      reorderHand(draggedCardId, card.id);
-      draggedCardId = null;
-    });
-  }
+  btn.addEventListener('drop', (event) => {
+    event.preventDefault();
+    btn.classList.remove('drag-over');
+    if (!draggedCardId || draggedCardId === card.id) return;
+    reorderHand(draggedCardId, card.id);
+    draggedCardId = null;
+  });
 
   return btn;
 }
@@ -177,7 +181,49 @@ function reorderHand(fromId, toId) {
   renderHand();
 }
 
-function renderTableCards(room) {
+function createMiniCard(card) {
+  const el = document.createElement('span');
+  el.className = `table-card ${getCardColor(card)}`;
+  el.textContent = getCardDisplay(card);
+  return el;
+}
+
+function buildGroupElement(cards, playerId, groupIdx, groupType) {
+  const group = document.createElement('div');
+  group.className = `laid-group ${groupType === 'trios' ? 'trio' : 'scale'}`;
+
+  cards.forEach((card) => group.appendChild(createMiniCard(card)));
+
+  group.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    group.classList.add('drag-over-group');
+  });
+  group.addEventListener('dragleave', () => group.classList.remove('drag-over-group'));
+  group.addEventListener('drop', (e) => {
+    e.preventDefault();
+    group.classList.remove('drag-over-group');
+    if (!draggedCardId) return;
+    if (!isMyTurn()) {
+      showMessage('No es tu turno.', 'error');
+      return;
+    }
+    if (!haveILaidDown()) {
+      showMessage('Primero debes bajarte.', 'error');
+      return;
+    }
+    socket.emit('add-to-table', {
+      cardIds: [draggedCardId],
+      groupIndex: groupIdx,
+      groupType,
+      playerId
+    });
+  });
+
+  return group;
+}
+
+function renderPlayers(room) {
   for (let i = 0; i < 4; i++) {
     const seat = document.getElementById(`player-${i}`);
     if (!seat) continue;
@@ -218,81 +264,22 @@ function renderTableCards(room) {
       laidBadge.textContent = '✓ Bajado';
       seat.appendChild(laidBadge);
 
-      if (room.tableCards && room.tableCards[player.id]) {
-        const tableData = room.tableCards[player.id];
+      const tableData = room.tableCards && room.tableCards[player.id];
+      if (tableData) {
         const laidCards = document.createElement('div');
         laidCards.className = 'laid-cards';
 
-        if (tableData.trios && tableData.trios.length) {
-          tableData.trios.forEach((trio, groupIdx) => {
-            const trioDisplay = document.createElement('div');
-            trioDisplay.className = 'laid-group trio';
-            trioDisplay.dataset.playerId = player.id;
-            trioDisplay.dataset.groupIndex = groupIdx;
-            trioDisplay.dataset.groupType = 'trios';
-            trioDisplay.addEventListener('dragover', (e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              trioDisplay.classList.add('drag-over-group');
-            });
-            trioDisplay.addEventListener('dragleave', () => {
-              trioDisplay.classList.remove('drag-over-group');
-            });
-            trioDisplay.addEventListener('drop', (e) => {
-              e.preventDefault();
-              trioDisplay.classList.remove('drag-over-group');
-              if (!draggedCardId || draggedFromTable) return;
-              socket.emit('add-to-table', {
-                cardIds: [draggedCardId],
-                groupIndex: parseInt(groupIdx),
-                groupType: 'trios',
-                playerId: player.id
-              });
-            });
-            trioDisplay.textContent = trio.map(getCardDisplay).join(' ');
-            laidCards.appendChild(trioDisplay);
-          });
-        }
-
-        if (tableData.scales && tableData.scales.length) {
-          tableData.scales.forEach((scale, groupIdx) => {
-            const scaleDisplay = document.createElement('div');
-            scaleDisplay.className = 'laid-group scale';
-            scaleDisplay.dataset.playerId = player.id;
-            scaleDisplay.dataset.groupIndex = groupIdx;
-            scaleDisplay.dataset.groupType = 'scales';
-            scaleDisplay.addEventListener('dragover', (e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              scaleDisplay.classList.add('drag-over-group');
-            });
-            scaleDisplay.addEventListener('dragleave', () => {
-              scaleDisplay.classList.remove('drag-over-group');
-            });
-            scaleDisplay.addEventListener('drop', (e) => {
-              e.preventDefault();
-              scaleDisplay.classList.remove('drag-over-group');
-              if (!draggedCardId || draggedFromTable) return;
-              socket.emit('add-to-table', {
-                cardIds: [draggedCardId],
-                groupIndex: parseInt(groupIdx),
-                groupType: 'scales',
-                playerId: player.id
-              });
-            });
-            scaleDisplay.textContent = scale.map(getCardDisplay).join(' ');
-            laidCards.appendChild(scaleDisplay);
-          });
-        }
+        (tableData.trios || []).forEach((trio, idx) => {
+          laidCards.appendChild(buildGroupElement(trio, player.id, idx, 'trios'));
+        });
+        (tableData.scales || []).forEach((scale, idx) => {
+          laidCards.appendChild(buildGroupElement(scale, player.id, idx, 'scales'));
+        });
 
         seat.appendChild(laidCards);
       }
     }
   }
-}
-
-function renderPlayers(room) {
-  renderTableCards(room);
 }
 
 function renderHand() {
@@ -456,6 +443,10 @@ function renderLaydownGroups() {
 }
 
 function openLayDownModal() {
+  if (haveILaidDown()) {
+    showMessage('Ya te bajaste en esta ronda.', 'error');
+    return;
+  }
   if (!isMyTurn()) {
     showMessage('No es tu turno.', 'error');
     return;
@@ -570,6 +561,17 @@ socket.on('player-hand', ({ hand }) => {
   syncLocalHandOrder();
   renderHand();
   if (!ui.layDownModal.classList.contains('hidden')) renderLaydownHand();
+});
+
+socket.on('round-won', ({ winnerName, nextRound }) => {
+  showMessage(`🏆 ${winnerName} ganó la ronda. Comienza la ronda ${nextRound}.`, 'success');
+  alert(`🏆 ${winnerName} ganó la ronda.\nComienza la ronda ${nextRound}.`);
+});
+
+socket.on('game-over', ({ winnerName, scores }) => {
+  const summary = scores.map((s) => `${s.name}: ${s.score}`).join('\n');
+  showMessage(`🏆 Fin del juego. Ganador: ${winnerName}`, 'success');
+  alert(`🏆 Fin del juego. Ganador: ${winnerName}\n\n${summary}`);
 });
 
 socket.on('error-message', (message) => {
