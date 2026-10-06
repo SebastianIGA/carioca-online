@@ -220,6 +220,9 @@ button:disabled {
   min-height: 560px;
   overflow: hidden;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .players-grid {
@@ -262,6 +265,16 @@ button:disabled {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
+}
+
+/* Ocultar seats según número de jugadores */
+.table-center[data-players="2"] .seat-top,
+.table-center[data-players="2"] .seat-bottom {
+  display: none;
+}
+
+.table-center[data-players="3"] .seat-bottom {
+  display: none;
 }
 
 .player-info {
@@ -310,6 +323,8 @@ button:disabled {
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .laid-group {
@@ -366,6 +381,7 @@ button:disabled {
 
 .table-card.joker {
   background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+  color: #1a1b1a;
 }
 
 .center-zone {
@@ -376,6 +392,7 @@ button:disabled {
   justify-content: center;
   gap: 40px;
   pointer-events: none;
+  z-index: 10;
 }
 
 .center-zone > * {
@@ -445,6 +462,11 @@ button:disabled {
   color: #000000;
 }
 
+.discard-card.joker {
+  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+  color: #1a1b1a;
+}
+
 .card-count {
   font-size: 0.9rem;
   font-weight: 700;
@@ -468,6 +490,7 @@ button:disabled {
   font-size: 0.95rem;
   max-width: 90%;
   color: #e8f3ef;
+  z-index: 20;
 }
 
 .player-hand-wrap {
@@ -528,6 +551,12 @@ button:disabled {
   color: #000000;
 }
 
+.card.joker {
+  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+  color: #1a1b1a;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+}
+
 .card:hover {
   transform: translateY(-8px);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.25);
@@ -548,12 +577,6 @@ button:disabled {
 
 .player-hand.dragging-active {
   opacity: 0.8;
-}
-
-.card.joker {
-  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
-  color: #1a1b1a;
-  border: 2px solid rgba(0, 0, 0, 0.2);
 }
 
 .card-value {
