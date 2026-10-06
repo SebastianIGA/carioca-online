@@ -111,7 +111,7 @@ function createRoom(name, maxPlayers = 4) {
     discard: [],
     tableMessage: 'Esperando jugadores...',
     scores: {},
-    tableCards: {} // { playerId: { trios: [[card, card, card]], scales: [[card, card, card, card]] } }
+    tableCards: {} // { playerId: { trios: [[card,...]], scales: [[card,...]] } }
   };
   rooms.set(roomId, room);
   return room;
@@ -138,13 +138,14 @@ function serializeRoom(room) {
     currentPlayer: currentPlayer ? { id: currentPlayer.id, name: currentPlayer.name } : null,
     deckCount: room.deck.length,
     discardTop: room.discard.length > 0 ? serializeCard(room.discard[room.discard.length - 1]) : null,
+    discard: room.discard.slice(-10).map(serializeCard),
     tableMessage: room.tableMessage,
     tableCards: Object.fromEntries(
       Object.entries(room.tableCards).map(([playerId, groups]) => [
         playerId,
         {
-          trios: groups.trios.map(g => g.map(serializeCard)),
-          scales: groups.scales.map(g => g.map(serializeCard))
+          trios: groups.trios.map((g) => g.map(serializeCard)),
+          scales: groups.scales.map((g) => g.map(serializeCard))
         }
       ])
     ),
@@ -213,13 +214,14 @@ function startGame(room) {
   emitRoomState(room);
 }
 
-function endRound(room) {
+function endRound(room, winner) {
   room.players.forEach((player) => {
     player.hand.forEach((card) => {
       room.scores[player.id] = (room.scores[player.id] || 0) + cardNumericValue(card);
     });
   });
 
+  const winnerName = winner ? winner.name : 'Un jugador';
   room.currentRound += 1;
 
   if (room.currentRound < ROUNDS.length) {
@@ -227,12 +229,21 @@ function endRound(room) {
     room.deck = createDeck();
     room.discard = [];
     room.tableCards = {};
-    room.tableMessage = `Ronda ${room.currentRound + 1}: ${ROUNDS[room.currentRound].description}`;
     dealCards(room);
+    room.tableMessage = `🏆 ${winnerName} ganó la ronda. Ronda ${room.currentRound + 1}: ${ROUNDS[room.currentRound].description}`;
+    io.to(room.id).emit('round-won', {
+      winnerId: winner ? winner.id : null,
+      winnerName,
+      nextRound: room.currentRound + 1
+    });
   } else {
     room.started = false;
     const sorted = [...room.players].sort((a, b) => (room.scores[a.id] || 0) - (room.scores[b.id] || 0));
     room.tableMessage = `Fin del juego. Ganador: ${sorted[0].name} con ${room.scores[sorted[0].id] || 0} puntos.`;
+    io.to(room.id).emit('game-over', {
+      winnerName: sorted[0].name,
+      scores: sorted.map((p) => ({ name: p.name, score: room.scores[p.id] || 0 }))
+    });
   }
 
   emitRoomState(room);
@@ -358,7 +369,7 @@ io.on('connection', (socket) => {
     room.tableMessage = `${player.name} descartó ${card.value}${card.suit}.`;
 
     if (player.hand.length === 0) {
-      endRound(room);
+      endRound(room, player);
     } else {
       room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.players.length;
       emitRoomState(room);
@@ -383,70 +394,53 @@ io.on('connection', (socket) => {
       return;
     }
 
+    trios = Array.isArray(trios) ? trios : [];
+    escalas = Array.isArray(escalas) ? escalas : [];
+
     const round = ROUNDS[room.currentRound];
     if (trios.length !== round.requiredTrios || escalas.length !== round.requiredScales) {
       socket.emit('error-message', `Esta ronda requiere ${round.requiredTrios} tríos y ${round.requiredScales} escalas.`);
       return;
     }
 
-    const allTrioCards = trios.flat();
-    for (const trioIds of trios) {
-      const cards = trioIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
-      if (!isValidTrio(cards)) {
-        socket.emit('error-message', 'Uno o más tríos no son válidos.');
-        return;
-      }
+    // Resolver cartas ANTES de quitarlas de la mano
+    const toCards = (ids) => ids.map((id) => player.hand.find((c) => c.id === id));
+    const trioGroups = trios.map(toCards);
+    const scaleGroups = escalas.map(toCards);
+
+    if ([...trioGroups, ...scaleGroups].some((g) => g.some((c) => !c))) {
+      socket.emit('error-message', 'Alguna carta no está en tu mano.');
+      return;
     }
 
-    const allScaleCards = escalas.flat();
-    for (const scaleIds of escalas) {
-      const cards = scaleIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
-      if (!isValidScale(cards)) {
-        socket.emit('error-message', 'Una o más escalas no son válidas.');
-        return;
-      }
+    if (trioGroups.some((g) => !isValidTrio(g))) {
+      socket.emit('error-message', 'Uno o más tríos no son válidos.');
+      return;
     }
 
-    const allIds = [...allTrioCards, ...allScaleCards];
+    if (scaleGroups.some((g) => !isValidScale(g))) {
+      socket.emit('error-message', 'Una o más escalas no son válidas.');
+      return;
+    }
+
+    const allIds = [...trios.flat(), ...escalas.flat()];
     if (new Set(allIds).size !== allIds.length) {
       socket.emit('error-message', 'Una carta está en dos grupos.');
       return;
     }
 
-    // Guardar cartas en la mesa
-    const tableCardsForPlayer = [];
-    trios.forEach((trioIds) => {
-      const cards = trioIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
-      tableCardsForPlayer.push({ cards, type: 'trio' });
-    });
-    escalas.forEach((scaleIds) => {
-      const cards = scaleIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
-      tableCardsForPlayer.push({ cards, type: 'scale' });
-    });
-
-    // Remover cartas de la mano
+    // Quitar de la mano
     allIds.forEach((cardId) => {
       const idx = player.hand.findIndex((c) => c.id === cardId);
       if (idx !== -1) player.hand.splice(idx, 1);
     });
 
     player.laidDown = true;
-    room.tableCards[player.id] = {
-      trios: trios.map((ids) => ids.map((id) => player.hand.find((c) => c.id === id) || 
-        trios.flat().reduce((acc, trioids) => {
-          const card = room.players.find(p => p.id === player.id)?.hand.find(c => c.id === id);
-          return card || acc;
-        }, null)).filter(Boolean)),
-      scales: escalas.map((ids) => ids.map((id) => player.hand.find((c) => c.id === id) || escalas.flat().reduce((acc, scaleids) => {
-        const card = room.players.find(p => p.id === player.id)?.hand.find(c => c.id === id);
-        return card || acc;
-      }, null)).filter(Boolean))
-    };
-
+    room.tableCards[player.id] = { trios: trioGroups, scales: scaleGroups };
     room.tableMessage = `${player.name} se bajó.`;
 
     if (player.hand.length === 0) {
-      endRound(room);
+      endRound(room, player);
     } else {
       emitRoomState(room);
     }
@@ -465,6 +459,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (!player.laidDown) {
+      socket.emit('error-message', 'Primero debes bajarte.');
+      return;
+    }
+
+    if (groupType !== 'trios' && groupType !== 'scales') return;
+
     if (!room.tableCards[playerId]) {
       socket.emit('error-message', 'Ese jugador no tiene cartas en la mesa.');
       return;
@@ -476,34 +477,31 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const cards = cardIds.map((id) => player.hand.find((c) => c.id === id)).filter(Boolean);
-    const allCards = [...group, ...cards];
-
-    let valid = false;
-    if (groupType === 'trios') {
-      valid = isValidTrio(allCards);
-    } else {
-      valid = isValidScale(allCards);
-    }
-
-    if (!valid) {
-      socket.emit('error-message', 'Las cartas no forman un grupo válido.');
+    const cards = (cardIds || []).map((id) => player.hand.find((c) => c.id === id));
+    if (!cards.length || cards.some((c) => !c)) {
+      socket.emit('error-message', 'Carta no encontrada en tu mano.');
       return;
     }
 
-    // Agregar cartas a la mesa
+    const allCards = [...group, ...cards];
+    const valid = groupType === 'trios' ? isValidTrio(allCards) : isValidScale(allCards);
+
+    if (!valid) {
+      socket.emit('error-message', 'Esa carta no encaja en ese grupo.');
+      return;
+    }
+
     room.tableCards[playerId][groupType][groupIndex] = allCards;
 
-    // Remover de la mano
     cardIds.forEach((cardId) => {
       const idx = player.hand.findIndex((c) => c.id === cardId);
       if (idx !== -1) player.hand.splice(idx, 1);
     });
 
-    room.tableMessage = `${player.name} agregó cartas a la mesa.`;
+    room.tableMessage = `${player.name} agregó una carta a la mesa.`;
 
     if (player.hand.length === 0) {
-      endRound(room);
+      endRound(room, player);
     } else {
       emitRoomState(room);
     }
