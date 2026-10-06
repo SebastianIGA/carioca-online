@@ -29,7 +29,8 @@ const ui = {
   scalesSelection: document.getElementById('scales-selection'),
   confirmLayDownBtn: document.getElementById('confirm-laydown-btn'),
   cancelLayDownBtn: document.getElementById('cancel-laydown-btn'),
-  layDownStatus: document.getElementById('laydown-status')
+  layDownStatus: document.getElementById('laydown-status'),
+  tableCenter: document.getElementById('table-center')
 };
 
 const MUST_DRAW_MESSAGE = 'Debes robar primero';
@@ -102,7 +103,6 @@ function updateActionButtons() {
   const myTurn = isMyTurn();
   ui.deckButton.disabled = !myTurn;
   ui.discardButton.disabled = !myTurn;
-  // Si ya me bajé, el botón desaparece
   ui.layDownBtn.classList.toggle('hidden', haveILaidDown());
   ui.layDownBtn.disabled = !myTurn;
 }
@@ -307,6 +307,11 @@ function renderRoom(room) {
   ui.tableMessage.textContent = room.tableMessage;
   ui.deckCount.textContent = room.deckCount;
   ui.discardCount.textContent = room.discard ? room.discard.length : 0;
+
+  // Adaptar mesa según número de jugadores
+  if (ui.tableCenter) {
+    ui.tableCenter.setAttribute('data-players', room.playerCount);
+  }
 
   if (room.discardTop) {
     ui.discardPreview.textContent = getCardDisplay(room.discardTop);
