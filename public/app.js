@@ -39,6 +39,7 @@ let currentPlayerId = null;
 let playerHand = [];
 let localHandOrder = [];
 let draggedCardId = null;
+let draggedFromTable = null;
 let laydownDraft = { trios: [], escalas: [] };
 let laydownSelection = [];
 
@@ -99,12 +100,12 @@ function updateActionButtons() {
   ui.layDownBtn.disabled = !myTurn;
 }
 
-function createCardElement(card) {
+function createCardElement(card, options = {}) {
   const btn = document.createElement('button');
   btn.className = `card ${getCardColor(card)}`;
   btn.dataset.cardId = card.id;
   btn.type = 'button';
-  btn.draggable = true;
+  btn.draggable = !options.readOnly;
 
   if (card.isJoker) {
     btn.innerHTML = '<div style="font-size: 2rem;">🂿</div>';
@@ -116,47 +117,50 @@ function createCardElement(card) {
     `;
   }
 
-  btn.addEventListener('click', () => {
-    if (!isMyTurn()) return;
-    if (mustDrawFirst()) {
-      showMessage(MUST_DRAW_MESSAGE, 'error');
-      return;
-    }
-    socket.emit('discard-card', { cardId: card.id });
-  });
+  if (!options.readOnly) {
+    btn.addEventListener('click', () => {
+      if (!isMyTurn()) return;
+      if (mustDrawFirst()) {
+        showMessage(MUST_DRAW_MESSAGE, 'error');
+        return;
+      }
+      socket.emit('discard-card', { cardId: card.id });
+    });
 
-  btn.addEventListener('dragstart', (event) => {
-    draggedCardId = card.id;
-    btn.classList.add('dragging');
-    ui.playerHand.classList.add('dragging-active');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', card.id);
-  });
+    btn.addEventListener('dragstart', (event) => {
+      draggedCardId = card.id;
+      draggedFromTable = null;
+      btn.classList.add('dragging');
+      ui.playerHand.classList.add('dragging-active');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', card.id);
+    });
 
-  btn.addEventListener('dragend', () => {
-    btn.classList.remove('dragging');
-    ui.playerHand.classList.remove('dragging-active');
-    document.querySelectorAll('.card.drag-over').forEach((el) => el.classList.remove('drag-over'));
-    draggedCardId = null;
-  });
+    btn.addEventListener('dragend', () => {
+      btn.classList.remove('dragging');
+      ui.playerHand.classList.remove('dragging-active');
+      document.querySelectorAll('.card.drag-over').forEach((el) => el.classList.remove('drag-over'));
+      draggedCardId = null;
+    });
 
-  btn.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    btn.classList.add('drag-over');
-  });
+    btn.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      btn.classList.add('drag-over');
+    });
 
-  btn.addEventListener('dragleave', () => {
-    btn.classList.remove('drag-over');
-  });
+    btn.addEventListener('dragleave', () => {
+      btn.classList.remove('drag-over');
+    });
 
-  btn.addEventListener('drop', (event) => {
-    event.preventDefault();
-    btn.classList.remove('drag-over');
-    if (!draggedCardId || draggedCardId === card.id) return;
-    reorderHand(draggedCardId, card.id);
-    draggedCardId = null;
-  });
+    btn.addEventListener('drop', (event) => {
+      event.preventDefault();
+      btn.classList.remove('drag-over');
+      if (!draggedCardId || draggedCardId === card.id) return;
+      reorderHand(draggedCardId, card.id);
+      draggedCardId = null;
+    });
+  }
 
   return btn;
 }
@@ -173,7 +177,7 @@ function reorderHand(fromId, toId) {
   renderHand();
 }
 
-function renderPlayers(room) {
+function renderTableCards(room) {
   for (let i = 0; i < 4; i++) {
     const seat = document.getElementById(`player-${i}`);
     if (!seat) continue;
@@ -208,41 +212,75 @@ function renderPlayers(room) {
     count.textContent = `Cartas: ${player.handCount}`;
     seat.appendChild(count);
 
-    // Mostrar si se bajó
     if (player.laidDown) {
       const laidBadge = document.createElement('div');
       laidBadge.className = 'laid-badge';
       laidBadge.textContent = '✓ Bajado';
       seat.appendChild(laidBadge);
 
-      // Mostrar cartas bajadas
-      if (room.laydowns && room.laydowns[player.id]) {
-        const laydown = room.laydowns[player.id];
+      if (room.tableCards && room.tableCards[player.id]) {
+        const tableData = room.tableCards[player.id];
         const laidCards = document.createElement('div');
         laidCards.className = 'laid-cards';
 
-        // Mostrar tríos
-        if (laydown.trios && laydown.trios.length) {
-          laydown.trios.forEach((trio) => {
+        if (tableData.trios && tableData.trios.length) {
+          tableData.trios.forEach((trio, groupIdx) => {
             const trioDisplay = document.createElement('div');
             trioDisplay.className = 'laid-group trio';
-            trioDisplay.textContent = trio.map((cardId) => {
-              const card = playerHand.find((c) => c.id === cardId);
-              return card ? getCardDisplay(card) : '?';
-            }).join(' ');
+            trioDisplay.dataset.playerId = player.id;
+            trioDisplay.dataset.groupIndex = groupIdx;
+            trioDisplay.dataset.groupType = 'trios';
+            trioDisplay.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              trioDisplay.classList.add('drag-over-group');
+            });
+            trioDisplay.addEventListener('dragleave', () => {
+              trioDisplay.classList.remove('drag-over-group');
+            });
+            trioDisplay.addEventListener('drop', (e) => {
+              e.preventDefault();
+              trioDisplay.classList.remove('drag-over-group');
+              if (!draggedCardId || draggedFromTable) return;
+              socket.emit('add-to-table', {
+                cardIds: [draggedCardId],
+                groupIndex: parseInt(groupIdx),
+                groupType: 'trios',
+                playerId: player.id
+              });
+            });
+            trioDisplay.textContent = trio.map(getCardDisplay).join(' ');
             laidCards.appendChild(trioDisplay);
           });
         }
 
-        // Mostrar escalas
-        if (laydown.escalas && laydown.escalas.length) {
-          laydown.escalas.forEach((escala) => {
+        if (tableData.scales && tableData.scales.length) {
+          tableData.scales.forEach((scale, groupIdx) => {
             const scaleDisplay = document.createElement('div');
             scaleDisplay.className = 'laid-group scale';
-            scaleDisplay.textContent = escala.map((cardId) => {
-              const card = playerHand.find((c) => c.id === cardId);
-              return card ? getCardDisplay(card) : '?';
-            }).join(' ');
+            scaleDisplay.dataset.playerId = player.id;
+            scaleDisplay.dataset.groupIndex = groupIdx;
+            scaleDisplay.dataset.groupType = 'scales';
+            scaleDisplay.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              scaleDisplay.classList.add('drag-over-group');
+            });
+            scaleDisplay.addEventListener('dragleave', () => {
+              scaleDisplay.classList.remove('drag-over-group');
+            });
+            scaleDisplay.addEventListener('drop', (e) => {
+              e.preventDefault();
+              scaleDisplay.classList.remove('drag-over-group');
+              if (!draggedCardId || draggedFromTable) return;
+              socket.emit('add-to-table', {
+                cardIds: [draggedCardId],
+                groupIndex: parseInt(groupIdx),
+                groupType: 'scales',
+                playerId: player.id
+              });
+            });
+            scaleDisplay.textContent = scale.map(getCardDisplay).join(' ');
             laidCards.appendChild(scaleDisplay);
           });
         }
@@ -251,6 +289,10 @@ function renderPlayers(room) {
       }
     }
   }
+}
+
+function renderPlayers(room) {
+  renderTableCards(room);
 }
 
 function renderHand() {
@@ -314,8 +356,6 @@ function joinRoomByCode() {
   socket.emit('join-room', { roomId, name });
   showMessage('Uniéndote a la sala...', 'success');
 }
-
-/* ---------- Bajarse ---------- */
 
 function isValidTrio(cards) {
   if (cards.length < 3) return false;
@@ -469,14 +509,11 @@ function confirmLayDown() {
   }
   socket.emit('lay-down', {
     trios: laydownDraft.trios,
-    escalas: laydownDraft.escalas,
-    selectedCards: [...laydownDraft.trios.flat(), ...laydownDraft.escalas.flat()]
+    escalas: laydownDraft.escalas
   });
   closeLayDownModal();
   showMessage('Bajada enviada.', 'success');
 }
-
-/* ---------- Eventos ---------- */
 
 function bindEvents() {
   ui.createRoomBtn.addEventListener('click', () => {
