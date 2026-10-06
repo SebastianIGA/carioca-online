@@ -29,11 +29,19 @@ const ui = {
   scalesSelection: document.getElementById('scales-selection'),
   confirmLayDownBtn: document.getElementById('confirm-laydown-btn'),
   cancelLayDownBtn: document.getElementById('cancel-laydown-btn'),
-  layDownStatus: document.getElementById('laydown-status'),
-  tableCenter: document.getElementById('table-center')
+  layDownStatus: document.getElementById('laydown-status')
 };
 
 const MUST_DRAW_MESSAGE = 'Debes robar primero';
+const JOKER_FACE = '🃏';
+
+// Qué asiento (player-N) usa cada jugador según la cantidad de jugadores
+const SEAT_MAP = {
+  1: [3],
+  2: [1, 2], // izquierda y derecha
+  3: [1, 0, 2], // izquierda, arriba, derecha
+  4: [0, 1, 2, 3]
+};
 
 let currentRoom = null;
 let currentPlayerId = null;
@@ -64,7 +72,7 @@ function mustDrawFirst() {
 }
 
 function getCardDisplay(card) {
-  if (card.isJoker) return '🂿';
+  if (card.isJoker) return JOKER_FACE;
   const value = card.value === 10 ? '10' : card.value;
   return `${value}${card.suit}`;
 }
@@ -115,7 +123,7 @@ function createCardElement(card) {
   btn.draggable = true;
 
   if (card.isJoker) {
-    btn.innerHTML = '<div style="font-size: 2rem;">🂿</div>';
+    btn.innerHTML = `<div class="joker-face">${JOKER_FACE}</div>`;
   } else {
     const valueStr = card.value === 10 ? '10' : card.value;
     btn.innerHTML = `
@@ -224,19 +232,21 @@ function buildGroupElement(cards, playerId, groupIdx, groupType) {
 }
 
 function renderPlayers(room) {
+  // Ocultar todos los asientos y mostrar solo los necesarios
   for (let i = 0; i < 4; i++) {
     const seat = document.getElementById(`player-${i}`);
-    if (!seat) continue;
-    seat.innerHTML = '';
-    const player = room.players[i];
-
-    if (!player) {
-      const empty = document.createElement('div');
-      empty.className = 'player-info';
-      empty.textContent = 'Vacío';
-      seat.appendChild(empty);
-      continue;
+    if (seat) {
+      seat.innerHTML = '';
+      seat.classList.add('hidden');
     }
+  }
+
+  const seatIds = SEAT_MAP[Math.min(Math.max(room.players.length, 1), 4)];
+
+  room.players.forEach((player, index) => {
+    const seat = document.getElementById(`player-${seatIds[index]}`);
+    if (!seat) return;
+    seat.classList.remove('hidden');
 
     const info = document.createElement('div');
     info.className = 'player-info';
@@ -279,7 +289,7 @@ function renderPlayers(room) {
         seat.appendChild(laidCards);
       }
     }
-  }
+  });
 }
 
 function renderHand() {
@@ -307,11 +317,6 @@ function renderRoom(room) {
   ui.tableMessage.textContent = room.tableMessage;
   ui.deckCount.textContent = room.deckCount;
   ui.discardCount.textContent = room.discard ? room.discard.length : 0;
-
-  // Adaptar mesa según número de jugadores
-  if (ui.tableCenter) {
-    ui.tableCenter.setAttribute('data-players', room.playerCount);
-  }
 
   if (room.discardTop) {
     ui.discardPreview.textContent = getCardDisplay(room.discardTop);

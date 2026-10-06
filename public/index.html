@@ -74,20 +74,16 @@
             </div>
           </div>
 
-          <div class="table-center">
-            <div class="players-grid">
-              <div id="player-0" class="seat seat-top"></div>
-              <div id="player-1" class="seat seat-left"></div>
-              <div id="player-2" class="seat seat-right"></div>
-              <div id="player-3" class="seat seat-bottom"></div>
-            </div>
+          <div id="table-center" class="table-center">
+            <div id="player-0" class="seat seat-top"></div>
+            <div id="player-1" class="seat seat-left"></div>
+            <div id="player-2" class="seat seat-right"></div>
+            <div id="player-3" class="seat seat-bottom"></div>
 
             <div class="center-zone">
               <div class="deck-area">
                 <button id="deck-button" class="deck-stack">
-                  <div class="card-back">
-                    <div class="card-back-pattern"></div>
-                  </div>
+                  <div class="card-back"></div>
                   <span id="deck-count" class="card-count">0</span>
                 </button>
                 <button id="discard-button" class="discard-pile">
@@ -95,10 +91,10 @@
                   <span id="discard-count" class="card-count">0</span>
                 </button>
               </div>
+            </div>
 
-              <div class="table-status">
-                <span id="table-message">Esperando jugadores...</span>
-              </div>
+            <div class="table-status">
+              <span id="table-message">Esperando jugadores...</span>
             </div>
           </div>
 
@@ -121,35 +117,29 @@
         <h3>Selecciona tus cartas</h3>
         
         <div class="laydown-container">
-          <!-- Cartas disponibles -->
           <div class="laydown-section">
             <h4>Cartas disponibles</h4>
             <div id="laydown-hand" class="laydown-hand"></div>
           </div>
 
-          <!-- Botones de agregar a tríos/escalas -->
           <div class="laydown-buttons">
             <button id="add-trios-btn" class="secondary small">Agregar a Tríos</button>
             <button id="add-scales-btn" class="secondary small">Agregar a Escalas</button>
           </div>
 
-          <!-- Tríos seleccionados -->
           <div class="laydown-section">
             <h4>Tríos</h4>
             <div id="trios-selection" class="groups-list"></div>
           </div>
 
-          <!-- Escalas seleccionadas -->
           <div class="laydown-section">
             <h4>Escalas</h4>
             <div id="scales-selection" class="groups-list"></div>
           </div>
         </div>
 
-        <!-- Mensaje de estado -->
         <div id="laydown-status" class="laydown-status"></div>
 
-        <!-- Botones de acción -->
         <div class="modal-actions">
           <button id="confirm-laydown-btn" class="primary">Confirmar</button>
           <button id="cancel-laydown-btn" class="secondary">Cancelar</button>
