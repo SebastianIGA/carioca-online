@@ -217,7 +217,7 @@ button:disabled {
   background: linear-gradient(180deg, #1d5945, #0d3d2f);
   border: 2px solid rgba(255, 255, 255, 0.1);
   border-radius: 28px;
-  min-height: 500px;
+  min-height: 560px;
   overflow: hidden;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.2);
 }
@@ -229,13 +229,14 @@ button:disabled {
 
 .seat {
   position: absolute;
-  min-width: 160px;
+  min-width: 180px;
+  max-width: 300px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 10px;
   font-size: 0.9rem;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
 }
 
@@ -305,46 +306,66 @@ button:disabled {
 
 .laid-cards {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .laid-group {
-  font-size: 0.75rem;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(123, 211, 139, 0.15);
-  border: 2px solid rgba(123, 211, 139, 0.3);
-  color: #b4f2c5;
-  word-break: break-word;
-  cursor: grab;
-  transition: all 0.2s;
-  min-height: 24px;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(123, 211, 139, 0.15);
+  border: 2px dashed rgba(123, 211, 139, 0.4);
+  min-height: 40px;
+  transition: all 0.2s;
 }
 
-.laid-group:active {
-  cursor: grabbing;
+.laid-group.scale {
+  background: rgba(212, 168, 68, 0.15);
+  border-color: rgba(212, 168, 68, 0.4);
 }
 
 .laid-group.drag-over-group {
   background: rgba(123, 211, 139, 0.4);
   border-color: var(--primary-strong);
+  border-style: solid;
   box-shadow: 0 0 12px rgba(212, 168, 68, 0.6);
   transform: scale(1.02);
 }
 
-.laid-group.scale {
-  background: rgba(212, 168, 68, 0.15);
-  border-color: rgba(212, 168, 68, 0.3);
-  color: #f0c85b;
-}
-
 .laid-group.scale.drag-over-group {
   background: rgba(212, 168, 68, 0.4);
+}
+
+.table-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 40px;
+  padding: 0 4px;
+  background: #ffffff;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #000;
+}
+
+.table-card.red {
+  color: #d32f2f;
+}
+
+.table-card.black {
+  color: #000;
+}
+
+.table-card.joker {
+  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
 }
 
 .center-zone {
@@ -354,6 +375,11 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 40px;
+  pointer-events: none;
+}
+
+.center-zone > * {
+  pointer-events: auto;
 }
 
 .deck-area {
